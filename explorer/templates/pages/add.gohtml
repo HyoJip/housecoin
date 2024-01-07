@@ -1,0 +1,16 @@
+{{- define "add" -}}
+    <!doctype html>
+    <html lang="ko">
+    {{ template "head" "Add" }}
+    <body>
+    {{ template "header" "Add" }}
+    <main>
+        <form method="POST">
+            <input type="text" name="blockData" placeholder="Data for your block" required />
+            <button type="submit">Add Block</button>
+        </form>
+    </main>
+    {{ template "footer" }}
+    </body>
+    </html>
+{{- end -}}

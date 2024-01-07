@@ -1,0 +1,19 @@
+{{- define "home" -}}
+  <!doctype html>
+  <html lang="ko">
+  {{ template "head" .Title}}
+  <body>
+  {{ template "header" .Title}}
+  <main>
+    {{ range .Blocks }}
+      <section>
+        <ul>
+          {{ template "block" .}}
+        </ul>
+      </section>
+    {{ end }}
+  </main>
+  {{ template "footer" }}
+  </body>
+  </html>
+{{- end -}}
