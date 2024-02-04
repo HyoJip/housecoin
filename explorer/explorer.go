@@ -8,11 +8,9 @@ import (
 	"net/http"
 )
 
-const (
-	port        = ":8080"
-	templateDir = "explorer/templates/"
-)
+const templateDir = "explorer/templates/"
 
+var port string
 var templates *template.Template
 
 type homeData struct {
@@ -20,15 +18,18 @@ type homeData struct {
 	Blocks []*blockchain.Block
 }
 
-func Start() {
+func Start(aPort string) {
+	port = aPort
+
 	templates = template.Must(template.ParseGlob(templateDir + "pages/*.gohtml"))
 	template.Must(templates.ParseGlob(templateDir + "partials/*.gohtml"))
 
-	http.HandleFunc("/", home)
-	http.HandleFunc("/add", add)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", home)
+	mux.HandleFunc("/add", add)
 
-	fmt.Printf("web page listen localhost:%s", port)
-	log.Fatal(http.ListenAndServe(port, nil))
+	fmt.Printf("web page listen localhost%s\n", port)
+	log.Fatal(http.ListenAndServe(port, mux))
 }
 
 func add(writer http.ResponseWriter, request *http.Request) {
