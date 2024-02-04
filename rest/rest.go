@@ -51,7 +51,7 @@ func Start(aPort string) {
 	handler.HandleFunc("/blocks", blocks).Methods("GET", "POST")
 	handler.HandleFunc("/blocks/{height:[0-9]+}", block).Methods("GET")
 
-	fmt.Printf("Start web server http://localhost%s\n", port)
+	fmt.Printf("Start REST server http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, handler))
 }
 
