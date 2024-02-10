@@ -44,6 +44,6 @@ func add(writer http.ResponseWriter, request *http.Request) {
 }
 
 func home(writer http.ResponseWriter, request *http.Request) {
-	parameters := homeData{"Home", blockchain.AllBlock()}
+	parameters := homeData{"Home", blockchain.FindBlocks()}
 	templates.ExecuteTemplate(writer, "home", parameters)
 }

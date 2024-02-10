@@ -9,7 +9,6 @@ import (
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 var port string
@@ -49,7 +48,7 @@ func Start(aPort string) {
 	// 약간 FunctionalInterface? 혹은 일급컬렉션과 비슷한 느낌? 하나의 합성필드만 가지는 wrap class
 	handler.HandleFunc("/", documentation).Methods("GET")
 	handler.HandleFunc("/blocks", blocks).Methods("GET", "POST")
-	handler.HandleFunc("/blocks/{height:[0-9]+}", block).Methods("GET")
+	handler.HandleFunc("/blocks/{hash:[a-f0-9]+}", block).Methods("GET")
 
 	fmt.Printf("Start REST server http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, handler))
@@ -77,7 +76,7 @@ func documentation(writer http.ResponseWriter, request *http.Request) {
 			Payload:     "data:string",
 		},
 		{
-			Url:         url("/blocks/{height}"),
+			Url:         url("/blocks/{hash}"),
 			Method:      "GET",
 			Description: "See The Block",
 		},
@@ -88,7 +87,7 @@ func documentation(writer http.ResponseWriter, request *http.Request) {
 func blocks(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "GET":
-		utils.HandleError(json.NewEncoder(writer).Encode(blockchain.AllBlock()))
+		utils.HandleError(json.NewEncoder(writer).Encode(blockchain.FindBlocks()))
 	case "POST":
 		var newBlockDTO newBlockRequest
 		utils.HandleError(json.NewDecoder(request.Body).Decode(&newBlockDTO))
@@ -99,10 +98,9 @@ func blocks(writer http.ResponseWriter, request *http.Request) {
 func block(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 
-	height, err := strconv.Atoi(vars["height"])
-	utils.HandleError(err)
+	hash := vars["hash"]
 
-	theBlock, err := blockchain.GetBlock(height)
+	theBlock, err := blockchain.FindBlock(hash)
 	encoder := json.NewEncoder(writer)
 	if errors.Is(err, blockchain.ErrNotFound) {
 		writer.WriteHeader(http.StatusNotFound)

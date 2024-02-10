@@ -6,6 +6,7 @@ import (
 	"github.com/Hyojip/housecoin/explorer"
 	"github.com/Hyojip/housecoin/rest"
 	"os"
+	"runtime"
 	"strconv"
 )
 
@@ -35,5 +36,5 @@ func usage() {
 	fmt.Printf("Choose Application Mode\n\n")
 	fmt.Printf("-m:    Choose Between 'rest' and 'explorer'\n")
 	fmt.Printf("-p:    Set the port of the server\n")
-	os.Exit(0)
+	runtime.Goexit()
 }
