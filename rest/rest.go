@@ -49,6 +49,7 @@ func Start(aPort string) {
 	handler.HandleFunc("/", documentation).Methods("GET")
 	handler.HandleFunc("/blocks", blocks).Methods("GET", "POST")
 	handler.HandleFunc("/blocks/{hash:[a-f0-9]+}", block).Methods("GET")
+	handler.HandleFunc("/status", status).Methods("GET")
 
 	fmt.Printf("Start REST server http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, handler))
@@ -80,6 +81,11 @@ func documentation(writer http.ResponseWriter, request *http.Request) {
 			Method:      "GET",
 			Description: "See The Block",
 		},
+		{
+			Url:         url("status"),
+			Method:      "GET",
+			Description: "Show Blockchain Status",
+		},
 	}
 	json.NewEncoder(writer).Encode(descriptions)
 }
@@ -108,4 +114,8 @@ func block(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	utils.HandleError(encoder.Encode(theBlock))
+}
+
+func status(writer http.ResponseWriter, request *http.Request) {
+	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.GetBlockchain()))
 }

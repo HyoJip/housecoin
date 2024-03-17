@@ -1,12 +1,12 @@
 package blockchain
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"github.com/Hyojip/housecoin/db"
 	"github.com/Hyojip/housecoin/utils"
 	"strings"
+	"time"
 )
 
 type Block struct {
@@ -16,16 +16,15 @@ type Block struct {
 	Height     int    `json:"height"`
 	Difficulty int    `json:"difficulty"`
 	Nonce      int    `json:"nonce"`
+	TimeStamp  int    `json:"timeStamp"`
 }
-
-const difficultyLevel = 2
 
 var ErrNotFound = errors.New("Block Not Found")
 
 func CreateBlock(data string, prevHash string, height int) *Block {
-	block := &Block{data, "", prevHash, height, difficultyLevel, 0}
+	block := &Block{Data: data, Hash: "", PrevHash: prevHash, Height: height, Difficulty: chain.difficulty(), Nonce: 0}
 	payload := block.Data + block.PrevHash + fmt.Sprint(block.Height)
-	block.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
+	block.Hash = utils.Hash(payload)
 	block.mine()
 	block.persist()
 	return block
@@ -34,10 +33,10 @@ func CreateBlock(data string, prevHash string, height int) *Block {
 func (b *Block) mine() {
 	target := strings.Repeat("0", b.Difficulty)
 	for {
-		blockAsString := fmt.Sprint(b)
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(blockAsString)))
-		fmt.Printf("Block As String:%s\nHash:%s\nNonce:%d\n\n\n", blockAsString, hash, b.Nonce)
+		hash := utils.Hash(b)
+		fmt.Printf("Block As Target:%s\nHash:%s\nNonce:%d\n\n\n", target, hash, b.Nonce)
 		if strings.HasPrefix(hash, target) {
+			b.TimeStamp = int(time.Now().Unix())
 			b.Hash = hash
 			break
 		} else {

@@ -2,7 +2,9 @@ package utils
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
+	"fmt"
 	"log"
 )
 
@@ -22,4 +24,10 @@ func ToBytes(i any) []byte {
 func FromBytes(i any, data []byte) {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	HandleError(decoder.Decode(i))
+}
+
+func Hash(i interface{}) string {
+	target := fmt.Sprintf("%v", i)
+	hashed := sha256.Sum256([]byte(target))
+	return fmt.Sprintf("%x", hashed)
 }
