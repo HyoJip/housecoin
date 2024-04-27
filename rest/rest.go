@@ -15,27 +15,31 @@ var port string
 
 type url string
 
-func (u url) marshalText() (text []byte, err error) {
-	link := fmt.Sprintf("http://localhost%s%s", port, u)
-	return []byte(link), nil
-}
-
 type urlDescription struct {
-	Url         url    `json:"Url"`
-	Method      string `json:"Method"`
-	Description string `json:"Description"`
-	Payload     string `json:"Payload,omitempty"`
-}
-
-type newBlockRequest struct {
-	Message string
+	Url         url    `json:"url"`
+	Method      string `json:"method"`
+	Description string `json:"description"`
+	Payload     string `json:"payload,omitempty"`
 }
 
 type errorResponse struct {
 	Message string `json:"message"`
 }
 
-type test http.Handler
+type balanceResponse struct {
+	Address string `json:"address,omitempty"`
+	Amount  int    `json:"amount"`
+}
+
+type addTransactionPayload struct {
+	To     string `json:"to,omitempty"`
+	Amount int    `json:"amount"`
+}
+
+func (u url) marshalText() (text []byte, err error) {
+	link := fmt.Sprintf("http://localhost%s%s", port, u)
+	return []byte(link), nil
+}
 
 func Start(aPort string) {
 	port = aPort
@@ -50,6 +54,9 @@ func Start(aPort string) {
 	handler.HandleFunc("/blocks", blocks).Methods("GET", "POST")
 	handler.HandleFunc("/blocks/{hash:[a-f0-9]+}", block).Methods("GET")
 	handler.HandleFunc("/status", status).Methods("GET")
+	handler.HandleFunc("/balance/{address}", balanceAddress).Methods("GET")
+	handler.HandleFunc("/mempool", mempool).Methods("GET")
+	handler.HandleFunc("/transactions", transactions).Methods("POST")
 
 	fmt.Printf("Start REST server http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, handler))
@@ -63,12 +70,17 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 
 }
 
-func documentation(writer http.ResponseWriter, request *http.Request) {
+func documentation(writer http.ResponseWriter, _ *http.Request) {
 	descriptions := []urlDescription{
 		{
 			Url:         url("/"),
 			Method:      "GET",
 			Description: "See Documentation",
+		},
+		{
+			Url:         url("/blocks"),
+			Method:      "GET",
+			Description: "Show All blocks",
 		},
 		{
 			Url:         url("/blocks"),
@@ -86,8 +98,18 @@ func documentation(writer http.ResponseWriter, request *http.Request) {
 			Method:      "GET",
 			Description: "Show Blockchain Status",
 		},
+		{
+			Url:         url("/balance/{address}"),
+			Method:      "GET",
+			Description: "Show Address's Balance",
+		},
+		{
+			Url:         url("/mempool"),
+			Method:      "GET",
+			Description: "Show Mempool Transactions",
+		},
 	}
-	json.NewEncoder(writer).Encode(descriptions)
+	utils.HandleError(json.NewEncoder(writer).Encode(descriptions))
 }
 
 func blocks(writer http.ResponseWriter, request *http.Request) {
@@ -95,12 +117,11 @@ func blocks(writer http.ResponseWriter, request *http.Request) {
 	case "GET":
 		utils.HandleError(json.NewEncoder(writer).Encode(blockchain.FindBlocks()))
 	case "POST":
-		var newBlockDTO newBlockRequest
-		utils.HandleError(json.NewDecoder(request.Body).Decode(&newBlockDTO))
-		blockchain.GetBlockchain().AddBlock(newBlockDTO.Message)
+		blockchain.GetBlockchain().AddBlock()
 		writer.WriteHeader(http.StatusCreated)
 	}
 }
+
 func block(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 
@@ -110,12 +131,41 @@ func block(writer http.ResponseWriter, request *http.Request) {
 	encoder := json.NewEncoder(writer)
 	if errors.Is(err, blockchain.ErrNotFound) {
 		writer.WriteHeader(http.StatusNotFound)
-		encoder.Encode(errorResponse{fmt.Sprint(err)})
+		utils.HandleError(encoder.Encode(errorResponse{fmt.Sprint(err)}))
 		return
 	}
 	utils.HandleError(encoder.Encode(theBlock))
 }
-
-func status(writer http.ResponseWriter, request *http.Request) {
+func status(writer http.ResponseWriter, _ *http.Request) {
 	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.GetBlockchain()))
+}
+
+func balanceAddress(writer http.ResponseWriter, request *http.Request) {
+	vars := mux.Vars(request)
+	address := vars["address"]
+	isTotal := request.URL.Query().Get("total")
+	var body interface{}
+	switch isTotal {
+	case "true":
+		totalAmount := blockchain.FindBalanceByAddress(address)
+		body = balanceResponse{address, totalAmount}
+	default:
+		body = blockchain.FindUTxOutsByAddress(address)
+	}
+	utils.HandleError(json.NewEncoder(writer).Encode(body))
+}
+
+func mempool(writer http.ResponseWriter, _ *http.Request) {
+	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.Mempool.Txs))
+}
+
+func transactions(writer http.ResponseWriter, request *http.Request) {
+	var payload addTransactionPayload
+	utils.HandleError(json.NewDecoder(request.Body).Decode(&payload))
+	err := blockchain.Mempool.AddTx(payload.To, payload.Amount)
+	if err != nil {
+		utils.HandleError(json.NewEncoder(writer).Encode(errorResponse{"Not enough funds"}))
+	}
+	writer.WriteHeader(http.StatusCreated)
+
 }

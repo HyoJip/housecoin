@@ -13,46 +13,37 @@ const (
 	allowedRangeMinutes int = 2
 )
 
+var once sync.Once
+var chain *blockchain
+
 type blockchain struct {
 	NewestHash        string `json:"newestHash"`
 	Height            int    `json:"height"`
 	CurrentDifficulty int    `json:"currentDifficulty"`
 }
 
-var chain *blockchain
-var once sync.Once
-
-func GetBlockchain() *blockchain {
-	if chain == nil {
-		once.Do(func() {
-			chain = &blockchain{
-				Height: 0,
-			}
-			checkpoint := db.Checkpoint()
-			if checkpoint == nil {
-				chain.AddBlock("Genesis Block")
-			} else {
-				chain.restore(checkpoint)
-			}
-		})
-	}
-	return chain
-}
-
-func (b *blockchain) restore(data []byte) {
-	utils.FromBytes(b, data)
-}
-
-func (b *blockchain) AddBlock(data string) {
-	block := CreateBlock(data, b.NewestHash, b.Height+1)
+func (b *blockchain) AddBlock() {
+	block := CreateBlock(b.NewestHash, b.Height+1)
 	b.NewestHash = block.Hash
 	b.Height = block.Height
 	b.CurrentDifficulty = block.Difficulty
-	b.persist()
+	persistBlockchain(b)
 }
 
-func (b *blockchain) persist() {
-	db.SaveCheckpoint(utils.ToBytes(b))
+func GetBlockchain() *blockchain {
+	once.Do(func() {
+		chain = &blockchain{
+			Height: 0,
+		}
+		checkpoint := db.Checkpoint()
+		if checkpoint == nil {
+			chain.AddBlock()
+		} else {
+			restoreBlockchain(chain, checkpoint)
+		}
+	})
+
+	return chain
 }
 
 func FindBlocks() []*Block {
@@ -67,17 +58,62 @@ func FindBlocks() []*Block {
 	return blocks
 }
 
-func (b *blockchain) difficulty() int {
+func FindUTxOutsByAddress(address string) []*UTxOut {
+	var uTxOuts []*UTxOut
+	creatorTxs := make(map[string]bool)
+	for _, b := range FindBlocks() {
+		for _, t := range b.Transactions {
+			for _, in := range t.TxIns {
+				if in.Owner == address {
+					creatorTxs[in.TxId] = true
+				}
+			}
+			for idx, out := range t.TxOuts {
+				if out.Owner == address {
+					if _, ok := creatorTxs[t.Id]; !ok {
+						uTxOut := &UTxOut{
+							TxID:   t.Id,
+							Index:  idx,
+							Amount: out.Amount,
+						}
+						if !containsTx(Mempool, uTxOut) {
+							uTxOuts = append(uTxOuts, uTxOut)
+						}
+					}
+				}
+			}
+		}
+	}
+	return uTxOuts
+}
+
+func FindBalanceByAddress(address string) int {
+	total := 0
+	for _, txOut := range FindUTxOutsByAddress(address) {
+		total += txOut.Amount
+	}
+	return total
+}
+
+func restoreBlockchain(b *blockchain, data []byte) {
+	utils.FromBytes(b, data)
+}
+
+func persistBlockchain(b *blockchain) {
+	db.SaveCheckpoint(utils.ToBytes(b))
+}
+
+func getDifficulty(b *blockchain) int {
 	if b.Height == 0 {
 		return defaultDifficulty
 	} else if b.Height%difficultyInterval == 0 {
-		return b.recalculateDifficulty()
+		return recalculateDifficulty(b)
 	} else {
 		return b.CurrentDifficulty
 	}
 }
 
-func (b *blockchain) recalculateDifficulty() int {
+func recalculateDifficulty(b *blockchain) int {
 	blocks := FindBlocks()
 	recentBlock := blocks[0]
 	lastDifficultyBlock := blocks[difficultyInterval-1]

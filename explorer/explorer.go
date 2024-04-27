@@ -38,7 +38,7 @@ func add(writer http.ResponseWriter, request *http.Request) {
 		templates.ExecuteTemplate(writer, "add", nil)
 	case "POST":
 		request.ParseForm()
-		blockchain.GetBlockchain().AddBlock(request.Form.Get("blockData"))
+		blockchain.GetBlockchain().AddBlock()
 		http.Redirect(writer, request, "/", http.StatusPermanentRedirect)
 	}
 }
