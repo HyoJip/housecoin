@@ -2,7 +2,6 @@ package blockchain
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Hyojip/housecoin/db"
 	"github.com/Hyojip/housecoin/utils"
 	"strings"
@@ -19,7 +18,7 @@ type Block struct {
 	Transactions []*Tx  `json:"transactions"`
 }
 
-var ErrNotFound = errors.New("Block Not Found")
+var ErrNotFound = errors.New("block not found")
 
 func CreateBlock(prevHash string, height int) *Block {
 	block := &Block{
@@ -39,7 +38,6 @@ func (b *Block) mine() {
 	target := strings.Repeat("0", b.Difficulty)
 	for {
 		hash := utils.Hash(b)
-		fmt.Printf("Block As Target:%s\nHash:%s\nNonce:%d\n\n\n", target, hash, b.Nonce)
 		if strings.HasPrefix(hash, target) {
 			b.TimeStamp = int(time.Now().Unix())
 			b.Hash = hash

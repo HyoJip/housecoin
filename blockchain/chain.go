@@ -64,12 +64,15 @@ func FindUTxOutsByAddress(address string) []*UTxOut {
 	for _, b := range FindBlocks() {
 		for _, t := range b.Transactions {
 			for _, in := range t.TxIns {
-				if in.Owner == address {
+				if in.Signature == "COINBASE" {
+					break
+				}
+				if FindTx(in.TxId).TxOuts[in.Index].Address == address {
 					creatorTxs[in.TxId] = true
 				}
 			}
 			for idx, out := range t.TxOuts {
-				if out.Owner == address {
+				if out.Address == address {
 					if _, ok := creatorTxs[t.Id]; !ok {
 						uTxOut := &UTxOut{
 							TxID:   t.Id,
@@ -93,6 +96,23 @@ func FindBalanceByAddress(address string) int {
 		total += txOut.Amount
 	}
 	return total
+}
+
+func FindTxs() []*Tx {
+	var txs []*Tx
+	for _, tx := range FindBlocks() {
+		txs = append(txs, tx.Transactions...)
+	}
+	return txs
+}
+
+func FindTx(txId string) *Tx {
+	for _, tx := range FindTxs() {
+		if txId == tx.Id {
+			return tx
+		}
+	}
+	return nil
 }
 
 func restoreBlockchain(b *blockchain, data []byte) {

@@ -2,7 +2,9 @@ package blockchain
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Hyojip/housecoin/utils"
+	"github.com/Hyojip/housecoin/wallet"
 	"time"
 )
 
@@ -10,7 +12,10 @@ const (
 	minerReward int = 50
 )
 
-var Mempool *mempool = &mempool{}
+var Mempool = &mempool{}
+
+var ErrorNotEnoughMoney = errors.New("not enough money")
+var ErrorNotValid = errors.New("invalid transaction")
 
 type Tx struct {
 	Id        string   `json:"id,omitempty"`
@@ -23,15 +28,36 @@ func (t *Tx) generateId() {
 	t.Id = utils.Hash(t)
 }
 
+func (t *Tx) sign() {
+	for _, tx := range t.TxIns {
+		tx.Signature = wallet.Sign(wallet.Wallet(), t.Id)
+	}
+}
+
+func validate(t *Tx) bool {
+	for _, txIn := range t.TxIns {
+		prevTx := FindTx(txIn.TxId)
+		if prevTx == nil {
+			return false
+		}
+
+		address := prevTx.TxOuts[txIn.Index].Address
+		if isCorrect := wallet.Verify(txIn.Signature, t.Id, address); !isCorrect {
+			return false
+		}
+	}
+	return true
+}
+
 type TxIn struct {
-	TxId  string `json:"txId,omitempty"`
-	Index int    `json:"index,omitempty"`
-	Owner string `json:"owner,omitempty"`
+	TxId      string `json:"txId,omitempty"`
+	Index     int    `json:"index,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
 type TxOut struct {
-	Owner  string `json:"owner,omitempty"`
-	Amount int    `json:"amount,omitempty"`
+	Address string `json:"address,omitempty"`
+	Amount  int    `json:"amount,omitempty"`
 }
 
 type UTxOut struct {
@@ -45,8 +71,9 @@ type mempool struct {
 }
 
 func (m *mempool) AddTx(to string, amount int) error {
-	tx, err := makeTx("house", to, amount)
+	tx, err := makeTx(wallet.Wallet().Address, to, amount)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 	m.Txs = append(m.Txs, tx)
@@ -54,7 +81,7 @@ func (m *mempool) AddTx(to string, amount int) error {
 }
 
 func (m *mempool) confirmTx() []*Tx {
-	coinbase := makeCoinbaseTx("house")
+	coinbase := makeCoinbaseTx(wallet.Wallet().Address)
 	txs := append(m.Txs, coinbase)
 	m.Txs = nil
 	return txs
@@ -76,7 +103,7 @@ Outer: // label
 
 func makeCoinbaseTx(address string) *Tx {
 	txIn := []*TxIn{
-		{"", -1, "CODEBASE"},
+		{"", -1, "COINBASE"},
 	}
 	txOut := []*TxOut{
 		{address, minerReward},
@@ -95,7 +122,7 @@ func makeCoinbaseTx(address string) *Tx {
 
 func makeTx(from, to string, amount int) (*Tx, error) {
 	if FindBalanceByAddress(from) < amount {
-		return nil, errors.New("Not enough money")
+		return nil, ErrorNotEnoughMoney
 	}
 
 	var txIns []*TxIn
@@ -107,9 +134,9 @@ func makeTx(from, to string, amount int) (*Tx, error) {
 			break
 		}
 		in := &TxIn{
-			TxId:  uOut.TxID,
-			Index: uOut.Index,
-			Owner: from,
+			TxId:      uOut.TxID,
+			Index:     uOut.Index,
+			Signature: from,
 		}
 		txIns = append(txIns, in)
 		total += uOut.Amount
@@ -117,14 +144,14 @@ func makeTx(from, to string, amount int) (*Tx, error) {
 
 	if change := total - amount; change != 0 {
 		changeOut := &TxOut{
-			Owner:  from,
-			Amount: change,
+			Address: from,
+			Amount:  change,
 		}
 		txOuts = append(txOuts, changeOut)
 	}
 	out := &TxOut{
-		Owner:  to,
-		Amount: amount,
+		Address: to,
+		Amount:  amount,
 	}
 	txOuts = append(txOuts, out)
 
@@ -135,6 +162,9 @@ func makeTx(from, to string, amount int) (*Tx, error) {
 		TxOuts:    txOuts,
 	}
 	tx.generateId()
-
+	tx.sign()
+	if !validate(tx) {
+		return nil, ErrorNotValid
+	}
 	return tx, nil
 }

@@ -289,4 +289,7 @@ Temporary Items
 ### db
 *.db
 
+### wallet
+*.wallet
+
 # End of https://www.toptal.com/developers/gitignore/api/go,macos,goland,goland+all,goland+iml

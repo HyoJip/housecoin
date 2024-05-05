@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Hyojip/housecoin/blockchain"
 	"github.com/Hyojip/housecoin/utils"
+	"github.com/Hyojip/housecoin/wallet"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
@@ -36,6 +37,10 @@ type addTransactionPayload struct {
 	Amount int    `json:"amount"`
 }
 
+type myWalletResponse struct {
+	Address string `json:"address,omitempty"`
+}
+
 func (u url) marshalText() (text []byte, err error) {
 	link := fmt.Sprintf("http://localhost%s%s", port, u)
 	return []byte(link), nil
@@ -57,6 +62,7 @@ func Start(aPort string) {
 	handler.HandleFunc("/balance/{address}", balanceAddress).Methods("GET")
 	handler.HandleFunc("/mempool", mempool).Methods("GET")
 	handler.HandleFunc("/transactions", transactions).Methods("POST")
+	handler.HandleFunc("/wallet", myWallet).Methods("GET")
 
 	fmt.Printf("Start REST server http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, handler))
@@ -136,10 +142,10 @@ func block(writer http.ResponseWriter, request *http.Request) {
 	}
 	utils.HandleError(encoder.Encode(theBlock))
 }
+
 func status(writer http.ResponseWriter, _ *http.Request) {
 	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.GetBlockchain()))
 }
-
 func balanceAddress(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	address := vars["address"]
@@ -164,8 +170,14 @@ func transactions(writer http.ResponseWriter, request *http.Request) {
 	utils.HandleError(json.NewDecoder(request.Body).Decode(&payload))
 	err := blockchain.Mempool.AddTx(payload.To, payload.Amount)
 	if err != nil {
+		writer.WriteHeader(http.StatusBadRequest)
 		utils.HandleError(json.NewEncoder(writer).Encode(errorResponse{"Not enough funds"}))
+		return
 	}
 	writer.WriteHeader(http.StatusCreated)
+}
 
+func myWallet(writer http.ResponseWriter, request *http.Request) {
+	address := wallet.Wallet().Address
+	json.NewEncoder(writer).Encode(myWalletResponse{address})
 }
