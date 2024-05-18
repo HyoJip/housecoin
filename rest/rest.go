@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Hyojip/housecoin/blockchain"
+	"github.com/Hyojip/housecoin/p2p"
 	"github.com/Hyojip/housecoin/utils"
 	"github.com/Hyojip/housecoin/wallet"
 	"github.com/gorilla/mux"
@@ -41,16 +42,16 @@ type myWalletResponse struct {
 	Address string `json:"address,omitempty"`
 }
 
-func (u url) marshalText() (text []byte, err error) {
-	link := fmt.Sprintf("http://localhost%s%s", port, u)
-	return []byte(link), nil
+type addPeerPayload struct {
+	Address string `json:"address,omitempty"`
+	Port    string `json:"port,omitempty"`
 }
 
 func Start(aPort string) {
 	port = aPort
 
 	handler := mux.NewRouter()
-	handler.Use(jsonContentTypeMiddleware) // go에서 만든 http.Handler의 SPI를 만족하기 위해서
+	handler.Use(jsonContentTypeMiddleware, loggerMiddleware) // go에서 만든 http.Handler의 SPI를 만족하기 위해서
 	// HandlerFunc라는 함수 프로토타입을 지정 후 덕타이핑에 필요한 함수(ServeHTTP) 구현
 	// HandlerFunc(func) 타입으로 생성할 경우, SPI를 만족하는 덕타이핑 함수가 상속(prototype)
 	// 사용자는 인자로 넘기는 func만 구현하면 알아서 http.Handler를 만족하는 어댑터가 만들어짐
@@ -63,6 +64,8 @@ func Start(aPort string) {
 	handler.HandleFunc("/mempool", mempool).Methods("GET")
 	handler.HandleFunc("/transactions", transactions).Methods("POST")
 	handler.HandleFunc("/wallet", myWallet).Methods("GET")
+	handler.HandleFunc("/ws", p2p.Upgrade).Methods("GET")
+	handler.HandleFunc("/peers", peers).Methods("GET", "POST")
 
 	fmt.Printf("Start REST server http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, handler))
@@ -73,7 +76,13 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 		writer.Header().Set("Content-Type", "application/json")
 		next.ServeHTTP(writer, request)
 	})
+}
 
+func loggerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Println(request.URL)
+		next.ServeHTTP(writer, request)
+	})
 }
 
 func documentation(writer http.ResponseWriter, _ *http.Request) {
@@ -114,10 +123,24 @@ func documentation(writer http.ResponseWriter, _ *http.Request) {
 			Method:      "GET",
 			Description: "Show Mempool Transactions",
 		},
+		{
+			Url:         url("/ws"),
+			Method:      "GET",
+			Description: "Upgrade WebSocket",
+		},
+		{
+			Url:         url("/peers"),
+			Method:      "GET",
+			Description: "Show connected Node",
+		},
+		{
+			Url:         url("/peers"),
+			Method:      "POST",
+			Description: "Connect to Node with port",
+		},
 	}
 	utils.HandleError(json.NewEncoder(writer).Encode(descriptions))
 }
-
 func blocks(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "GET":
@@ -146,6 +169,7 @@ func block(writer http.ResponseWriter, request *http.Request) {
 func status(writer http.ResponseWriter, _ *http.Request) {
 	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.GetBlockchain()))
 }
+
 func balanceAddress(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	address := vars["address"]
@@ -160,7 +184,6 @@ func balanceAddress(writer http.ResponseWriter, request *http.Request) {
 	}
 	utils.HandleError(json.NewEncoder(writer).Encode(body))
 }
-
 func mempool(writer http.ResponseWriter, _ *http.Request) {
 	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.Mempool.Txs))
 }
@@ -180,4 +203,16 @@ func transactions(writer http.ResponseWriter, request *http.Request) {
 func myWallet(writer http.ResponseWriter, request *http.Request) {
 	address := wallet.Wallet().Address
 	json.NewEncoder(writer).Encode(myWalletResponse{address})
+}
+
+func peers(writer http.ResponseWriter, request *http.Request) {
+	switch request.Method {
+	case "POST":
+		var payload addPeerPayload
+		utils.HandleError(json.NewDecoder(request.Body).Decode(&payload))
+		p2p.AddPeer(payload.Address, payload.Port, port)
+		writer.WriteHeader(http.StatusOK)
+	case "GET":
+		json.NewEncoder(writer).Encode(p2p.Peers)
+	}
 }
