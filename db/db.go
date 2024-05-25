@@ -2,7 +2,7 @@ package db
 
 import (
 	"github.com/Hyojip/housecoin/utils"
-	"github.com/boltdb/bolt"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (
