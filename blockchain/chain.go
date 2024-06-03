@@ -1,8 +1,10 @@
 package blockchain
 
 import (
+	"encoding/json"
 	"github.com/Hyojip/housecoin/db"
 	"github.com/Hyojip/housecoin/utils"
+	"net/http"
 	"sync"
 )
 
@@ -20,14 +22,51 @@ type blockchain struct {
 	NewestHash        string `json:"newestHash"`
 	Height            int    `json:"height"`
 	CurrentDifficulty int    `json:"currentDifficulty"`
+	m                 sync.Mutex
 }
 
-func (b *blockchain) AddBlock() {
+func (b *blockchain) AddBlock() *Block {
 	block := CreateBlock(b.NewestHash, b.Height+1)
 	b.NewestHash = block.Hash
 	b.Height = block.Height
 	b.CurrentDifficulty = block.Difficulty
 	persistBlockchain(b)
+	return block
+}
+
+func (b *blockchain) Replace(newBlocks []*Block) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	newestBlock := newBlocks[0]
+	b.Height = len(newBlocks)
+	b.NewestHash = newestBlock.Hash
+	b.CurrentDifficulty = newestBlock.Difficulty
+	persistBlockchain(b)
+	db.EmptyBlock()
+
+	for _, block := range newBlocks {
+		persistBlock(block)
+	}
+}
+
+func (b *blockchain) AddPeerBlock(newBlock *Block) {
+	b.m.Lock()
+	m.M.Lock()
+	defer b.m.Unlock()
+	defer m.M.Unlock()
+
+	b.Height += 1
+	b.NewestHash = newBlock.Hash
+	b.CurrentDifficulty = newBlock.Difficulty
+
+	persistBlockchain(b)
+	persistBlock(newBlock)
+
+	for _, t := range newBlock.Transactions {
+		if _, ok := m.Txs[t.Id]; ok {
+			delete(m.Txs, t.Id)
+		}
+	}
 }
 
 func GetBlockchain() *blockchain {
@@ -47,8 +86,12 @@ func GetBlockchain() *blockchain {
 }
 
 func FindBlocks() []*Block {
+	b := GetBlockchain()
+	b.m.Lock()
+	defer b.m.Unlock()
+
 	var blocks []*Block
-	hashCursor := GetBlockchain().NewestHash
+	hashCursor := b.NewestHash
 	for hashCursor != "" {
 		block, _ := FindBlock(hashCursor)
 		blocks = append(blocks, block)
@@ -79,7 +122,7 @@ func FindUTxOutsByAddress(address string) []*UTxOut {
 							Index:  idx,
 							Amount: out.Amount,
 						}
-						if !containsTx(Mempool, uTxOut) {
+						if !containsTx(GetMempool(), uTxOut) {
 							uTxOuts = append(uTxOuts, uTxOut)
 						}
 					}
@@ -141,8 +184,14 @@ func recalculateDifficulty(b *blockchain) int {
 	expectedMinutes := difficultyInterval * blockInterval
 	if diffMinutes <= expectedMinutes-allowedRangeMinutes {
 		b.CurrentDifficulty++
-	} else if diffMinutes >= expectedMinutes+allowedRangeMinutes {
+	} else if diffMinutes >= expectedMinutes+allowedRangeMinutes && b.CurrentDifficulty > 0 {
 		b.CurrentDifficulty--
 	}
 	return b.CurrentDifficulty
+}
+
+func Status(b *blockchain, w http.ResponseWriter) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	utils.HandleError(json.NewEncoder(w).Encode(b))
 }

@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"fmt"
+	"github.com/Hyojip/housecoin/utils"
 	"github.com/gorilla/websocket"
 	"sync"
 )
@@ -24,7 +25,12 @@ type peer struct {
 	inbox   chan []byte
 }
 
+// goroutine이 총 3개??
+// 메인스레드, write, read
 func initPeer(conn *websocket.Conn, address, port string) *peer {
+	Peers.m.Lock()
+	defer Peers.m.Unlock()
+
 	key := fmt.Sprintf("%s:%s", address, port)
 	p := &peer{
 		key:     key,
@@ -45,12 +51,13 @@ func (p *peer) read() {
 	defer p.close()
 
 	for {
-		_, message, err := p.conn.ReadMessage()
+		message := &Message{}
+		err := p.conn.ReadJSON(message)
 		if err != nil {
 			return
 		}
 
-		fmt.Printf("%s\n", message)
+		handleMessage(message, p)
 	}
 }
 
@@ -61,14 +68,14 @@ func (p *peer) write() {
 		if !ok {
 			return
 		}
-		p.conn.WriteMessage(websocket.TextMessage, m)
+		utils.HandleError(p.conn.WriteMessage(websocket.TextMessage, m))
 	}
 }
 
 func (p *peer) close() {
 	Peers.m.Lock()
 	defer Peers.m.Unlock()
-	p.conn.Close()
+	utils.HandleError(p.conn.Close())
 	delete(Peers.v, p.key)
 }
 

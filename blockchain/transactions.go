@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Hyojip/housecoin/utils"
 	"github.com/Hyojip/housecoin/wallet"
+	"sync"
 	"time"
 )
 
@@ -12,10 +13,35 @@ const (
 	minerReward int = 50
 )
 
-var Mempool = &mempool{}
-
 var ErrorNotEnoughMoney = errors.New("not enough money")
 var ErrorNotValid = errors.New("invalid transaction")
+
+var m *Mempool
+var memOnce sync.Once
+
+type Mempool struct {
+	Txs map[string]*Tx
+	M   sync.Mutex
+}
+
+func GetMempool() *Mempool {
+	if m == nil {
+		memOnce.Do(func() {
+			m = &Mempool{
+				Txs: make(map[string]*Tx),
+				M:   sync.Mutex{},
+			}
+		})
+	}
+	return m
+}
+
+func (m *Mempool) AddPeerTx(tx *Tx) {
+	m.M.Lock()
+	defer m.M.Unlock()
+
+	m.Txs[tx.Id] = tx
+}
 
 type Tx struct {
 	Id        string   `json:"id,omitempty"`
@@ -66,28 +92,28 @@ type UTxOut struct {
 	Amount int    `json:"amount,omitempty"`
 }
 
-type mempool struct {
-	Txs []*Tx
-}
-
-func (m *mempool) AddTx(to string, amount int) error {
+func (m *Mempool) AddTx(to string, amount int) (*Tx, error) {
 	tx, err := makeTx(wallet.Wallet().Address, to, amount)
 	if err != nil {
 		fmt.Println(err)
-		return err
+		return nil, err
 	}
-	m.Txs = append(m.Txs, tx)
-	return nil
+	m.Txs[tx.Id] = tx
+	return tx, nil
 }
 
-func (m *mempool) confirmTx() []*Tx {
+func (m *Mempool) confirmTx() []*Tx {
 	coinbase := makeCoinbaseTx(wallet.Wallet().Address)
-	txs := append(m.Txs, coinbase)
-	m.Txs = nil
+	var txs []*Tx
+	for _, tx := range m.Txs {
+		txs = append(txs, tx)
+	}
+	txs = append(txs, coinbase)
+	m.Txs = make(map[string]*Tx)
 	return txs
 }
 
-func containsTx(m *mempool, out *UTxOut) bool {
+func containsTx(m *Mempool, out *UTxOut) bool {
 	isContains := false
 Outer: // label
 	for _, t := range m.Txs {

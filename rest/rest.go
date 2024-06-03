@@ -121,7 +121,7 @@ func documentation(writer http.ResponseWriter, _ *http.Request) {
 		{
 			Url:         url("/mempool"),
 			Method:      "GET",
-			Description: "Show Mempool Transactions",
+			Description: "Show getMempool Transactions",
 		},
 		{
 			Url:         url("/ws"),
@@ -146,7 +146,8 @@ func blocks(writer http.ResponseWriter, request *http.Request) {
 	case "GET":
 		utils.HandleError(json.NewEncoder(writer).Encode(blockchain.FindBlocks()))
 	case "POST":
-		blockchain.GetBlockchain().AddBlock()
+		b := blockchain.GetBlockchain().AddBlock()
+		p2p.BroadcastNewBlock(b)
 		writer.WriteHeader(http.StatusCreated)
 	}
 }
@@ -167,7 +168,7 @@ func block(writer http.ResponseWriter, request *http.Request) {
 }
 
 func status(writer http.ResponseWriter, _ *http.Request) {
-	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.GetBlockchain()))
+	blockchain.Status(blockchain.GetBlockchain(), writer)
 }
 
 func balanceAddress(writer http.ResponseWriter, request *http.Request) {
@@ -185,22 +186,27 @@ func balanceAddress(writer http.ResponseWriter, request *http.Request) {
 	utils.HandleError(json.NewEncoder(writer).Encode(body))
 }
 func mempool(writer http.ResponseWriter, _ *http.Request) {
-	utils.HandleError(json.NewEncoder(writer).Encode(blockchain.Mempool.Txs))
+	m := blockchain.GetMempool()
+	m.M.Lock()
+	defer m.M.Unlock()
+	utils.HandleError(json.NewEncoder(writer).Encode(m.Txs))
 }
 
 func transactions(writer http.ResponseWriter, request *http.Request) {
 	var payload addTransactionPayload
 	utils.HandleError(json.NewDecoder(request.Body).Decode(&payload))
-	err := blockchain.Mempool.AddTx(payload.To, payload.Amount)
+	tx, err := blockchain.GetMempool().AddTx(payload.To, payload.Amount)
 	if err != nil {
 		writer.WriteHeader(http.StatusBadRequest)
 		utils.HandleError(json.NewEncoder(writer).Encode(errorResponse{"Not enough funds"}))
 		return
 	}
+
+	go p2p.BroadcastNewTx(tx)
 	writer.WriteHeader(http.StatusCreated)
 }
 
-func myWallet(writer http.ResponseWriter, request *http.Request) {
+func myWallet(writer http.ResponseWriter, _ *http.Request) {
 	address := wallet.Wallet().Address
 	json.NewEncoder(writer).Encode(myWalletResponse{address})
 }
@@ -213,6 +219,6 @@ func peers(writer http.ResponseWriter, request *http.Request) {
 		p2p.AddPeer(payload.Address, payload.Port, port)
 		writer.WriteHeader(http.StatusOK)
 	case "GET":
-		json.NewEncoder(writer).Encode(p2p.FindPeers(&p2p.Peers))
+		utils.HandleError(json.NewEncoder(writer).Encode(p2p.FindPeers(&p2p.Peers)))
 	}
 }

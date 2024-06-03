@@ -12,7 +12,7 @@ type Block struct {
 	Hash         string `json:"hash"`
 	PrevHash     string `json:"prevHash,omitempty"`
 	Height       int    `json:"height"`
-	Difficulty   int    `json:"getDifficulty"`
+	Difficulty   int    `json:"difficulty"`
 	Nonce        int    `json:"nonce"`
 	TimeStamp    int    `json:"timeStamp"`
 	Transactions []*Tx  `json:"transactions"`
@@ -29,7 +29,7 @@ func CreateBlock(prevHash string, height int) *Block {
 		Nonce:      0,
 	}
 	block.mine()
-	block.Transactions = Mempool.confirmTx()
+	block.Transactions = GetMempool().confirmTx()
 	persistBlock(block)
 	return block
 }

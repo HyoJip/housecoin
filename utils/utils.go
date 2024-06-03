@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -27,7 +28,13 @@ func FromBytes(i any, data []byte) {
 	HandleError(decoder.Decode(i))
 }
 
-func Hash(i interface{}) string {
+func ToJSON(i any) []byte {
+	result, err := json.Marshal(i)
+	HandleError(err)
+	return result
+}
+
+func Hash(i any) string {
 	target := fmt.Sprintf("%v", i)
 	hashed := sha256.Sum256([]byte(target))
 	return fmt.Sprintf("%x", hashed)

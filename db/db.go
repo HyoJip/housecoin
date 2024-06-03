@@ -1,12 +1,14 @@
 package db
 
 import (
+	"fmt"
 	"github.com/Hyojip/housecoin/utils"
 	bolt "go.etcd.io/bbolt"
+	"os"
 )
 
 const (
-	DbName        = "blockchain.db"
+	DbName        = "blockchain"
 	BucketData    = "data"
 	BucketBlocks  = "blocks"
 	KeyCheckpoint = "checkpoint"
@@ -19,7 +21,7 @@ func DB() *bolt.DB {
 		return db
 	}
 
-	dbPointer, err := bolt.Open(DbName, 0600, nil)
+	dbPointer, err := bolt.Open(getDBName(), 0600, nil)
 	utils.HandleError(err)
 	db = dbPointer
 	db.Update(func(tx *bolt.Tx) error {
@@ -70,4 +72,18 @@ func Block(hash string) []byte {
 		return nil
 	})
 	return block
+}
+
+func EmptyBlock() {
+	DB().Update(func(tx *bolt.Tx) error {
+		utils.HandleError(tx.DeleteBucket([]byte(BucketBlocks)))
+		_, err := tx.CreateBucket([]byte(BucketBlocks))
+		utils.HandleError(err)
+		return nil
+	})
+}
+
+func getDBName() string {
+	port := os.Args[2][3:]
+	return fmt.Sprintf("%s_%s.db", DbName, port)
 }
