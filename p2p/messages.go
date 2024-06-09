@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Hyojip/housecoin/blockchain"
 	"github.com/Hyojip/housecoin/utils"
+	"strings"
 )
 
 type MessageKind int
@@ -20,6 +21,7 @@ const (
 	MessageAllBlockResponse
 	MessageNotifyNewBlock
 	MessageNotifyNewTx
+	MessageNotifyNewPeer
 )
 
 func sendNewestBlock(p *peer) {
@@ -37,6 +39,7 @@ func makeMessage(kind MessageKind, payload interface{}) []byte {
 	message := utils.ToJSON(m)
 	return message
 }
+
 func handleMessage(m *Message, p *peer) {
 	switch m.Kind {
 	case MessageNewestBlock:
@@ -71,6 +74,11 @@ func handleMessage(m *Message, p *peer) {
 		var tx *blockchain.Tx
 		utils.HandleError(json.Unmarshal(m.Payload, &tx))
 		blockchain.GetMempool().AddPeerTx(tx)
+	case MessageNotifyNewPeer:
+		var payload string
+		utils.HandleError(json.Unmarshal(m.Payload, &payload))
+		parts := strings.Split(payload, ":")
+		AddPeer(parts[0], parts[1], parts[2], false)
 	}
 }
 
@@ -91,5 +99,10 @@ func notifyNewBlock(b *blockchain.Block, p *peer) {
 
 func notifyNewTx(tx *blockchain.Tx, p *peer) {
 	m := makeMessage(MessageNotifyNewTx, tx)
+	p.inbox <- m
+}
+
+func notifyNewPeer(payload string, p *peer) {
+	m := makeMessage(MessageNotifyNewPeer, payload)
 	p.inbox <- m
 }
