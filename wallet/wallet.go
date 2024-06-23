@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/Hyojip/housecoin/utils"
+	"io/fs"
 	"math/big"
 	"os"
 )
@@ -22,6 +23,7 @@ type wallet struct {
 }
 
 var w *wallet
+var fileLayer = osFileLayer{}
 
 func Wallet() *wallet {
 	if w != nil {
@@ -77,7 +79,7 @@ func restoreBigInts(signature string) (*big.Int, *big.Int, error) {
 
 func loadWallet() *wallet {
 	w := &wallet{}
-	if hasWalletFile() {
+	if fileLayer.hasWalletFile() {
 		w.privateKey = restoreKey()
 	} else {
 		key := createPrivateKey()
@@ -98,11 +100,6 @@ func toStringFrom(a, b *big.Int) string {
 	return fmt.Sprintf("%x", bytes)
 }
 
-func hasWalletFile() bool {
-	_, err := os.Stat(filename)
-	return err == nil
-}
-
 func createPrivateKey() *ecdsa.PrivateKey {
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	utils.HandleError(err)
@@ -112,13 +109,34 @@ func createPrivateKey() *ecdsa.PrivateKey {
 func persistKey(key *ecdsa.PrivateKey) {
 	keyAsBytes, err := x509.MarshalECPrivateKey(key)
 	utils.HandleError(err)
-	err = os.WriteFile(filename, keyAsBytes, os.FileMode(0644))
+	err = fileLayer.WriteFile(filename, keyAsBytes, os.FileMode(0644))
 	utils.HandleError(err)
 }
 func restoreKey() *ecdsa.PrivateKey {
-	keyAsBytes, err := os.ReadFile(filename)
+	keyAsBytes, err := fileLayer.ReadFile(filename)
 	utils.HandleError(err)
 	key, err := x509.ParseECPrivateKey(keyAsBytes)
 	utils.HandleError(err)
 	return key
+}
+
+type walletFileAccessible interface {
+	hasWalletFile() bool
+	WriteFile(name string, data []byte, perm fs.FileMode) error
+	readFile(name string) ([]byte, error)
+}
+
+type osFileLayer struct{}
+
+func (s *osFileLayer) hasWalletFile() bool {
+	_, err := os.Stat(filename)
+	return err == nil
+}
+
+func (s *osFileLayer) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return os.WriteFile(name, data, perm)
+}
+
+func (s *osFileLayer) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
 }

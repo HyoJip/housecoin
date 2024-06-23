@@ -293,3 +293,5 @@ Temporary Items
 *.wallet
 
 # End of https://www.toptal.com/developers/gitignore/api/go,macos,goland,goland+all,goland+iml
+
+Jenkinsfile

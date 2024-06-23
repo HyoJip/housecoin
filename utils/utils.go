@@ -10,9 +10,11 @@ import (
 	"strings"
 )
 
+var logger = log.Println
+
 func HandleError(e error) {
 	if e != nil {
-		log.Panicln(e)
+		logger(e)
 	}
 }
 
